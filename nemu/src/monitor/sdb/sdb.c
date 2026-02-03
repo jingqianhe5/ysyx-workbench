@@ -18,6 +18,9 @@
 #include <readline/readline.h>
 #include <readline/history.h>
 #include "sdb.h"
+#include <memory/paddr.h>
+#include "expr.h"
+#include "watchpoint.h"
 
 static int is_batch_mode = false;
 
@@ -49,10 +52,69 @@ static int cmd_c(char *args) {
 
 
 static int cmd_q(char *args) {
+  nemu_state.state = NEMU_QUIT;
   return -1;
 }
 
 static int cmd_help(char *args);
+
+static int cmd_si(char *args){//单步执行命令
+  if(args!=NULL){
+    cpu_exec(atoi(args));
+  }
+  else {
+    cpu_exec(1);
+  }
+  return 0;
+}
+
+static int cmd_info(char *args){
+  if(*args=='r'){
+    isa_reg_display();
+  }
+  if(*args=='w'){
+    isa_watchpoint_diaplay();
+  }
+  return 0;
+}
+
+static int cmd_p(char *args) {
+  bool success=true;
+  expr(args,&success);//输出的内容写函数内部
+  return 0;
+}//表达式求值
+
+static int cmd_x(char *args){
+  char *cnt_char = strtok(args," ");
+  int cnt_int = atoi(cnt_char);
+  char *addr_char = cnt_char + strlen(cnt_char) + 1;
+  paddr_t addr;
+  sscanf(addr_char,"%x",&addr);
+  for(int i=0;i<cnt_int;i++){
+    printf("%08x",paddr_read(addr,4));
+    addr = addr + 4;
+    printf("\n");
+  }
+  return 0;
+}
+
+static int  cmd_w(char *args){
+  bool success=true;
+  WP *new_point = new_wp();
+  strcpy(new_point->expressions, args);
+  new_point->old_val = expr(args,&success);
+  return 0;
+}
+
+static int cmd_d(char *args){
+  int point_num=0;
+  while(*args!='\0'){
+    point_num=10*point_num + (*args-'0');
+    args++;
+  }
+  free_wp(point_num);
+  return 0;
+}
 
 static struct {
   const char *name;
@@ -62,7 +124,12 @@ static struct {
   { "help", "Display information about all supported commands", cmd_help },
   { "c", "Continue the execution of the program", cmd_c },
   { "q", "Exit NEMU", cmd_q },
-
+  { "si", "单步执行（自定义添加）", cmd_si},//添加单步执行命令si
+  {"info", "打印信息（自定义添加）",cmd_info},//添加打印信息指令 其中r是打印寄存器的信息
+  { "x","扫描内存（自定义添加）",cmd_x},//添加内存扫描指令x
+  { "p","表达式求值（自定义添加）",cmd_p},//添加表达式求值命令
+  { "w","设置一个监视点（自定义添加）",cmd_w},//监视点
+  { "d", "删除一个监视点（自定义添加）",cmd_d},//删除一个监视点
   /* TODO: Add more commands */
 
 };
