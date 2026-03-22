@@ -34,9 +34,18 @@ static bool g_print_step = false;
 void device_update();
 WP* check_wp();
 
+
+#define iringbuf_size 16 //假设一共输出16条指令
+char iringbuf [iringbuf_size][128];//定义一个二维数组  环形缓冲区
+int iringbuf_idx = 0;//当前的位置
+
 static void trace_and_difftest(Decode *_this, vaddr_t dnpc) {
 #ifdef CONFIG_ITRACE_COND
-  if (ITRACE_COND) { log_write("%s\n", _this->logbuf); }
+  if (ITRACE_COND) { 
+    strcpy(iringbuf[iringbuf_idx],_this->logbuf);
+    iringbuf_idx = ((iringbuf_idx+1==iringbuf_size)?0:iringbuf_idx+1);
+    //log_write("%s\n", _this->logbuf); 
+  }
 #endif
   if (g_print_step) { IFDEF(CONFIG_ITRACE, puts(_this->logbuf)); }
   IFDEF(CONFIG_DIFFTEST, difftest_step(_this->pc, dnpc));
@@ -44,10 +53,21 @@ static void trace_and_difftest(Decode *_this, vaddr_t dnpc) {
 //是否有监视点发生变化
 }
 
+
+void display_iringbuf(){
+  for(int i=0;i<16;i++){
+    if(i==15){
+      log_write("----->");
+    }
+    log_write("      %s\n",iringbuf[(iringbuf_idx+i)%16]);
+  }
+}
+
+
 static void exec_once(Decode *s, vaddr_t pc) {
   s->pc = pc;
   s->snpc = pc;
-  isa_exec_once(s);
+  isa_exec_once(s);//取指
   cpu.pc = s->dnpc;
 #ifdef CONFIG_ITRACE
   char *p = s->logbuf;
@@ -126,6 +146,9 @@ void cpu_exec(uint64_t n) {
            (nemu_state.halt_ret == 0 ? ANSI_FMT("HIT GOOD TRAP", ANSI_FG_GREEN) :
             ANSI_FMT("HIT BAD TRAP", ANSI_FG_RED))),
           nemu_state.halt_pc);
+      if (nemu_state.state == NEMU_ABORT || (nemu_state.state == NEMU_END && nemu_state.halt_ret != 0)) {
+          display_iringbuf();
+      }
       // fall through
     case NEMU_QUIT: statistic();
   }

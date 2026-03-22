@@ -25,7 +25,15 @@ image: image-dep
 	@echo + OBJCOPY "->" $(IMAGE_REL).bin
 	@$(OBJCOPY) -S --set-section-flags .bss=alloc,contents -O binary $(IMAGE).elf $(IMAGE).bin
 
+
+NPC_HOME := /home/hjq/usr/ysyx/verilator
+NPC_V    := $(NPC_HOME)/ysyx_26010032_npc.v
+NPC_CPP  := $(NPC_HOME)/ysyx_26010032_npc.cpp
+NPC_EXEC := obj_dir/Vysyx_26010032_npc
+
 run: insert-arg
 	echo "TODO: add command here to run simulation"
+	verilator --trace-fst --cc --exe --build -j 0 -Wall -I$(NPC_HOME) $(NPC_CPP) $(NPC_V)
+	$(NPC_EXEC) $(IMAGE).bin
 
 .PHONY: insert-arg

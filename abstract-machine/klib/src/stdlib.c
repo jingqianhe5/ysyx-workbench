@@ -34,7 +34,18 @@ void *malloc(size_t size) {
   // Therefore do not call panic() here, else it will yield a dead recursion:
   //   panic() -> putchar() -> (glibc) -> malloc() -> panic()
 #if !(defined(__ISA_NATIVE__) && defined(__NATIVE_USE_KLIB__))
-  panic("Not implemented");
+  //panic("Not implemented");
+  static uint8_t *addr = NULL;
+
+  if(addr == NULL){
+    addr = (uint8_t *)heap.start;
+  }
+
+  size = (size+7)&~7;
+
+  void *ret = addr;
+  addr += size;
+  return ret;
 #endif
   return NULL;
 }

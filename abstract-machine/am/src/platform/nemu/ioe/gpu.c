@@ -4,17 +4,33 @@
 #define SYNC_ADDR (VGACTL_ADDR + 4)
 
 void __am_gpu_init() {
+  uint32_t screen_info = inl(VGACTL_ADDR);
+  int i;
+  int w = screen_info>>16;  // TODO: get the correct width
+  int h = screen_info & 0xFFFF;  // TODO: get the correct height
+  uint32_t *fb = (uint32_t *)(uintptr_t)FB_ADDR;
+  for (i = 0; i < w * h; i ++) fb[i] = i;
+  outl(SYNC_ADDR, 1);
 }
 
 void __am_gpu_config(AM_GPU_CONFIG_T *cfg) {
+  uint32_t screen_info = inl(VGACTL_ADDR);
   *cfg = (AM_GPU_CONFIG_T) {
     .present = true, .has_accel = false,
-    .width = 0, .height = 0,
-    .vmemsz = 0
+    .width = screen_info>>16, .height = screen_info & 0xFFFF,
+    .vmemsz = (screen_info>>16) * (screen_info & 0xFFFF) * sizeof(uint32_t)
   };
 }
 
 void __am_gpu_fbdraw(AM_GPU_FBDRAW_T *ctl) {
+  uint32_t *fb = (uint32_t *)(uintptr_t)FB_ADDR;
+  int width  = io_read(AM_GPU_CONFIG).width;
+
+  for(int i = 0; i < ctl->h; i++){
+    for(int j = 0;j < ctl->w;j++){
+      fb[((ctl->y+ i)*width )+(ctl->x+j)]=((uint32_t *)ctl->pixels)[i * ctl->w + j];
+    }
+  }
   if (ctl->sync) {
     outl(SYNC_ADDR, 1);
   }

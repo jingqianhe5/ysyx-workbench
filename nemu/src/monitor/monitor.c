@@ -15,6 +15,7 @@
 
 #include <isa.h>
 #include <memory/paddr.h>
+#include <elf.h>
 
 void init_rand();
 void init_log(const char *log_file);
@@ -75,15 +76,19 @@ static int parse_args(int argc, char *argv[]) {
     {"diff"     , required_argument, NULL, 'd'},
     {"port"     , required_argument, NULL, 'p'},
     {"help"     , no_argument      , NULL, 'h'},
+    {"elf"      , required_argument, NULL, 'e'},
     {0          , 0                , NULL,  0 },
   };
   int o;
-  while ( (o = getopt_long(argc, argv, "-bhl:d:p:", table, NULL)) != -1) {
+  char*elf_file=NULL;
+  void ftrace_init(char *elf_file);
+  while ( (o = getopt_long(argc, argv, "-bhl:d:p:e:", table, NULL)) != -1) {
     switch (o) {
       case 'b': sdb_set_batch_mode(); break;
       case 'p': sscanf(optarg, "%d", &difftest_port); break;
       case 'l': log_file = optarg; break;
       case 'd': diff_so_file = optarg; break;
+      case 'e': elf_file = optarg;ftrace_init(elf_file);break;
       case 1: img_file = optarg; return 0;
       default:
         printf("Usage: %s [OPTION...] IMAGE [args]\n\n", argv[0]);
@@ -91,12 +96,119 @@ static int parse_args(int argc, char *argv[]) {
         printf("\t-l,--log=FILE           output log to FILE\n");
         printf("\t-d,--diff=REF_SO        run DiffTest with reference REF_SO\n");
         printf("\t-p,--port=PORT          run DiffTest with port PORT\n");
+        printf("\t-e,--elf=FILE           run ELF FILE for ftrace\n");
         printf("\n");
         exit(0);
     }
   }
   return 0;
 }
+
+
+
+
+typedef struct {
+    char name[64];
+    uint32_t addr;
+    uint32_t size;
+} FuncSymbol;
+
+FuncSymbol func_table[1024]; 
+int func_cnt = 0;            
+
+void ftrace_init(char *elf_file){
+  #ifdef CONFIG_FTRACE_COND
+    if (!FTRACE_COND||elf_file==NULL) { 
+        return ;
+    }
+    else {
+      FILE *fp = fopen(elf_file,"rb");
+      assert(fp != NULL);
+      Elf32_Ehdr ehdr;
+      if(fread(&ehdr,sizeof(Elf32_Ehdr),1,fp)<=0){
+        assert(0);
+      }
+      assert(*(uint32_t *)ehdr.e_ident == 0x464c457f);
+
+      Elf32_Shdr *shdrs = malloc(sizeof(Elf32_Shdr) * ehdr.e_shnum);
+      fseek(fp,ehdr.e_shoff,SEEK_SET);
+      if (fread(shdrs, sizeof(Elf32_Shdr), ehdr.e_shnum, fp) != ehdr.e_shnum) {
+          assert(0); 
+      }
+
+      Elf32_Shdr *symtab_hdr = NULL;
+      Elf32_Shdr *strtab_hdr = NULL;
+      for(int i = 0 ;i < ehdr.e_shnum;i++){
+        if(shdrs[i].sh_type == SHT_SYMTAB){
+          symtab_hdr = &shdrs[i];//符号表
+          strtab_hdr = &shdrs[symtab_hdr ->sh_link];//字符串表
+          break;
+        }
+      }
+      char *strtab = malloc(strtab_hdr ->sh_size);
+      fseek(fp,strtab_hdr -> sh_offset,SEEK_SET);
+      if (fread(strtab, 1, strtab_hdr->sh_size, fp) != strtab_hdr->sh_size) {
+          assert(0);
+      }
+
+      int sym_num = symtab_hdr->sh_size / symtab_hdr->sh_entsize; 
+      Elf32_Sym *syms = malloc(symtab_hdr->sh_size);
+      fseek(fp, symtab_hdr->sh_offset, SEEK_SET);
+      if (fread(syms, sizeof(Elf32_Sym), sym_num, fp) != sym_num) {
+          assert(0);
+      }
+
+      for(int i = 0;i<sym_num;i++){
+        if(ELF32_ST_TYPE(syms[i].st_info)==STT_FUNC){
+          char*func_name = strtab + syms[i].st_name;
+          uint32_t func_addr = syms[i].st_value;
+          uint32_t func_size = syms[i].st_size;
+          if (func_cnt < 1024) {
+                strncpy(func_table[func_cnt].name, func_name, 63);
+                func_table[func_cnt].name[63] = '\0'; // 确保安全结束
+                func_table[func_cnt].addr = func_addr;
+                func_table[func_cnt].size = func_size;
+                func_cnt++;
+          } 
+        }
+      }
+      free(shdrs);
+      free(strtab);
+      free(syms);
+      fclose(fp);
+    }
+  #endif
+}
+int deep = 0;
+void find_name(int rd,int rs1,uint32_t current_pc,uint32_t target_pc){
+    if(rd == 1){
+      for (int i = 0;i < func_cnt;i++){
+      uint32_t start = func_table[i].addr;
+      uint32_t end   = start + func_table[i].size;
+
+        if(target_pc >= start && target_pc <end){
+          log_write("Call:0x%08x----->0x%08x %*sname:%s\n", current_pc,target_pc,deep*2,"  ",func_table[i].name);
+          deep++;      
+          break;  
+        }
+      }
+    }
+    else if(rd==0 && rs1 ==1){
+      deep--;
+      for (int i = 0;i < func_cnt;i++){
+      uint32_t start = func_table[i].addr;
+      uint32_t end   = start + func_table[i].size;
+
+        if(current_pc >= start && current_pc <end){
+          log_write("RET:0x%08x----->0x%08x %*sname:%s\n", current_pc,target_pc,deep*2,"  ",func_table[i].name);   
+          break;  
+        }
+      }
+    }
+}
+
+
+
 
 void init_monitor(int argc, char *argv[]) {
   /* Perform some global initialization. */
