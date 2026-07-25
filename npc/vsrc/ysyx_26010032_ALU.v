@@ -16,7 +16,7 @@ module ysyx_26010032_ALU(
     /* verilator lint_on UNUSEDSIGNAL */
 
     output [31:0] result,
-    output [31:0] npc,
+    output [31:0] new_pc,
     output wen,
     output change_pc
 );
@@ -40,7 +40,7 @@ module ysyx_26010032_ALU(
         (is_auipc)  ?   (imm_32+pc):
         32'b0;
 
-    assign npc = 
+    assign new_pc = 
         (is_jalr) ? ((src1 + imm_32) & ~32'b1) : // jalr 的跳转目标
         (is_jal)  ? (pc + imm_32)              : // jal 的跳转目标
         32'b0;

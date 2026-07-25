@@ -26,14 +26,16 @@ image: image-dep
 	@$(OBJCOPY) -S --set-section-flags .bss=alloc,contents -O binary $(IMAGE).elf $(IMAGE).bin
 
 
-NPC_HOME := $(abspath $(AM_HOME)/../npc/vsrc)
-NPC_V    := $(wildcard $(NPC_HOME)/*.v)
-NPC_CPP  := $(NPC_HOME)/ysyx_26010032_npc.cpp
+NPC_HOME := $(abspath $(AM_HOME)/../npc)
+NPC_V    := $(wildcard $(NPC_HOME)/vsrc/*.v)
+NPC_C   := $(wildcard $(NPC_HOME)/csrc/*.c)
+NPC_CPP := $(wildcard $(NPC_HOME)/csrc/*.cpp)
+NPC_SRC := $(NPC_C) $(NPC_CPP)
 NPC_EXEC := obj_dir/Vysyx_26010032_npc
 
 run: insert-arg
-	echo "TODO: add command here to run simulation"
-	verilator --trace-fst --cc --exe --build -j 0 -Wall -Wno-fatal -Wno-DECLFILENAME -Wno-UNUSEDPARAM --top-module ysyx_26010032_npc -I$(NPC_HOME) $(NPC_CPP) $(NPC_V)
+	#echo "TODO: add command here to run simulation"
+	verilator --trace-fst --cc --exe --build -j 0 -Wall -Wno-fatal -Wno-DECLFILENAME -Wno-UNUSEDPARAM -LDFLAGS "-lreadline" --top-module ysyx_26010032_npc -I$(NPC_HOME) $(NPC_SRC) $(NPC_V)
 	$(NPC_EXEC) $(IMAGE).bin
 
 .PHONY: insert-arg

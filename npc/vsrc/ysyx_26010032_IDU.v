@@ -59,7 +59,7 @@ module ysyx_26010032_IDU(
     );
 
 
-    always @(posedge clk)begin
+    always @(posedge clk)begin//e-break
         if(ins==32'h00100073)begin
             npc_trap(a0);
         end

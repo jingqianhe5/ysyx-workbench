@@ -7,7 +7,7 @@ module ysyx_26010032_npc(
 );
 
 
-wire [31:0] npc;
+wire [31:0] new_pc;
 wire change_pc;
 wire [31:0]pc;
 assign out_pc = pc;
@@ -16,7 +16,7 @@ ysyx_26010032_pc u_ysyx_26010032_pc(
     .clk    (clk),
     .rst    (rst),
     .change_pc(change_pc),
-    .npc    (npc),
+    .new_pc    (new_pc),
     .pc     (pc)
 
 
@@ -93,7 +93,7 @@ ysyx_26010032_ALU u_ysyx_26010032_ALU(//计算
     .is_auipc(is_auipc),
 
     .result (result),
-    .npc    (npc),
+    .new_pc    (new_pc),
     .wen    (wen),
     .change_pc(change_pc)
 );
