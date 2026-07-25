@@ -47,7 +47,7 @@ bool run_step(int times){//推进一个周期
     top->clk = 1;
     top->eval();
     step_and_dump_wave();
-    top->clk = 0;
+    top->clk = 0; 
     top->eval();
     step_and_dump_wave();
     if (top->rst != 1 && check_wp()) {
