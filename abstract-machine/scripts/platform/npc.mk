@@ -32,10 +32,20 @@ NPC_C   := $(wildcard $(NPC_HOME)/csrc/*.c)
 NPC_CPP := $(wildcard $(NPC_HOME)/csrc/*.cpp)
 NPC_SRC := $(NPC_C) $(NPC_CPP)
 NPC_EXEC := obj_dir/Vysyx_26010032_npc
+CAPSTONE_HOME := $(abspath $(AM_HOME)/../nemu/tools/capstone/repo)
+CAPSTONE_INC  := $(CAPSTONE_HOME)/include
+CAPSTONE_LIB  := $(CAPSTONE_HOME)/libcapstone.so.5
+NEMU_HOME := $(abspath $(AM_HOME)/../nemu)
+NEMU_REF  := $(NEMU_HOME)/build/riscv32-nemu-interpreter-so
+
 
 run: insert-arg
-	#echo "TODO: add command here to run simulation"
-	verilator --trace-fst --cc --exe --build -j 0 -Wall -Wno-fatal -Wno-DECLFILENAME -Wno-UNUSEDPARAM -LDFLAGS "-lreadline" --top-module ysyx_26010032_npc -I$(NPC_HOME) $(NPC_SRC) $(NPC_V)
-	$(NPC_EXEC) $(IMAGE).bin
+	verilator --trace-fst --cc --exe --build -j 0 \
+		-Wall -Wno-fatal -Wno-DECLFILENAME -Wno-UNUSEDPARAM \
+		-CFLAGS "-I$(CAPSTONE_INC) -I$(NEMU_HOME)/include" \
+		-LDFLAGS "-lreadline -ldl $(CAPSTONE_LIB) -Wl,-rpath,$(CAPSTONE_HOME)" \
+		--top-module ysyx_26010032_npc \
+		-I$(NPC_HOME) $(NPC_SRC) $(NPC_V)
+	$(NPC_EXEC) $(IMAGE).bin $(NEMU_REF)
 
 .PHONY: insert-arg

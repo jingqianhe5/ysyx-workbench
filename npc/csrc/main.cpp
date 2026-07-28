@@ -16,6 +16,8 @@
 #include "sdb.h"
 #include "expr.h"
 #include "watchpoint.h"
+#include <capstone/capstone.h>
+#include "difftest.h"
 
 // ================================================================
 // 物理内存与程序镜像
@@ -40,7 +42,20 @@ static bool load_image(const char *image_path) {
   return true;
 }
 */
+static csh disasm_handle;
 
+static void init_disasm() {
+  cs_err err = cs_open(
+      CS_ARCH_RISCV,
+      CS_MODE_RISCV32,
+      &disasm_handle);
+
+  if (err != CS_ERR_OK) {
+    printf("Failed to initialize Capstone: %s\n",
+           cs_strerror(err));
+    exit(1);
+  }
+}
 // ================================================================
 // 调试器输入
 // ================================================================
@@ -52,7 +67,7 @@ static char* rl_gets() {
     line_read = NULL;
   }
 
-  line_read = readline("(my NPC) ");
+  line_read = readline("(my NPC) :");
 
   if (line_read && *line_read) {
     add_history(line_read);
@@ -94,6 +109,13 @@ void sim_exit(){//退出仿真
 // CPU 执行控制
 // ================================================================
 //bool keep = true;//保持仿真
+extern "C" uint32_t pmem_read(uint32_t offset) {
+  return (uint32_t)pmem[offset]
+       | (uint32_t)pmem[offset + 1] << 8
+       | (uint32_t)pmem[offset + 2] << 16
+       | (uint32_t)pmem[offset + 3] << 24;
+}
+
 
 extern "C" void npc_trap(int code){//程序结束并且检查寄存器0是不是0
   if(code==0){
@@ -106,7 +128,54 @@ extern "C" void npc_trap(int code){//程序结束并且检查寄存器0是不是
   }
   keep = false;
 }
+static int deep = 0;
+extern "C" void itrace(uint32_t pc, uint32_t ins) {
+  uint8_t code[4] = {
+    static_cast<uint8_t>(ins),
+    static_cast<uint8_t>(ins >> 8),
+    static_cast<uint8_t>(ins >> 16),
+    static_cast<uint8_t>(ins >> 24)
+  };
 
+  cs_insn *decoded = nullptr;
+  size_t count = cs_disasm(
+      disasm_handle,
+      code,
+      sizeof(code),
+      pc,
+      1,
+      &decoded);
+  
+  if (count == 1) {
+    if((ins & 0x00000fff )== 0x000000ef){
+      deep ++;
+      for (int i = 0 ;i < deep;i++){
+        printf("  ");
+      }
+      printf("\033[1;32m[ftrace](deep=%d)(call)\033[0m\n", deep);
+    }
+    if(ins == 0x00008067){
+      for (int i = 0 ;i < deep;i++){
+        printf("  ");
+      }
+      printf("\033[1;33m[ftrace](deep=%d)(ret)\033[0m\n", deep);
+      deep --;
+    }
+    for (int i = 0 ;i < deep;i++){
+      printf("  ");
+    }
+    printf("[itrace] %08x: %08x  %-8s %s\n",
+           pc,
+           ins,
+           decoded[0].mnemonic,
+           decoded[0].op_str);
+
+    cs_free(decoded, count);
+  } else {
+    printf("[itrace] %08x: %08x  <unknown>\n",
+           pc, ins);
+  }
+}
 /*
 //功能
 void run_step(int times){//推进一个周期
@@ -222,12 +291,12 @@ static struct{
   {"w","添加监视点",cmd_w},
   {"d","删除监视点",cmd_d},
 };
-
 // ================================================================
 // 程序入口
 // ================================================================
 int main(int argc,char** argv) {
   printf("Hello, ysyx!\n");
+  init_disasm();
   init_wp_pool();
   init_regex();
   if(argc < 2){
@@ -254,6 +323,11 @@ int main(int argc,char** argv) {
   // 推进几个时间步
   run_step(5);
   top->rst = 0; // 松开复位，开始工作
+
+  //diff初始化
+  CPU_state initial_state = {};
+  initial_state.pc = 0x80000000;
+  init_difftest(pmem, img_size,&initial_state);
 
   // 4. 主循环 (模拟时钟和内存行为)
   char *str;

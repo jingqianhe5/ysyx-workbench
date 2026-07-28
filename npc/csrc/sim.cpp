@@ -5,6 +5,7 @@
 #include "memory.h"
 #include "sim.h"
 #include "watchpoint.h"
+#include "difftest.h"
 
 VerilatedContext* contextp = NULL;
 VerilatedFstC* tfp = NULL;
@@ -30,18 +31,33 @@ void sim_exit(){//退出仿真
   step_and_dump_wave();
   tfp->close();
 }
+static CPU_state get_dut_state() {
+    CPU_state state = {};
 
+    auto &rf =
+        top->rootp->ysyx_26010032_npc__DOT__u_ysyx_26010032_GPR_rs1__DOT__rf;
+
+    for (int i = 0; i < 32; i++) {
+        state.gpr[i] = rf[i];
+    }
+
+    state.pc =
+        top->rootp->ysyx_26010032_npc__DOT__pc;
+
+    return state;
+}
 bool run_step(int times){//推进一个周期
   for(int i = 0; i < times&&keep; i++) {
     if(top->rst!=1){
-      uint32_t current_pc = top->out_pc;
+      uint32_t current_pc = top->rootp->ysyx_26010032_npc__DOT__pc;
       if (current_pc < 0x80000000 || current_pc >= 0x80000000 + PMEM_SIZE - 4) {
         printf("[PC越界] PC越界或不对齐: 0x%08x\n", current_pc);
         keep = false;
         return false; // 强行跳出循环，保存波形
       }
-      top->ins = ((uint32_t)pmem[(current_pc-0x80000000)]|(uint32_t)pmem[((current_pc-0x80000000)+1)]<<8|(uint32_t)pmem[((current_pc-0x80000000)+2)]<<16|(uint32_t)pmem[((current_pc-0x80000000)+3)]<<24);
-      printf("给指令：%08x\n",top->ins);
+      //top->rootp->ysyx_26010032_npc__DOT__ins = ((uint32_t)pmem[(current_pc-0x80000000)]|(uint32_t)pmem[((current_pc-0x80000000)+1)]<<8|(uint32_t)pmem[((current_pc-0x80000000)+2)]<<16|(uint32_t)pmem[((current_pc-0x80000000)+3)]<<24);
+      //printf("给指令：%08x\n",top->ins);
+
     }
 
     top->clk = 1;
@@ -50,6 +66,13 @@ bool run_step(int times){//推进一个周期
     top->clk = 0; 
     top->eval();
     step_and_dump_wave();
+    if(top->rst!=1){
+    CPU_state dut_state = get_dut_state();
+
+      if (!difftest_single_step(&dut_state)) {
+          return true;
+      }
+    }
     if (top->rst != 1 && check_wp()) {
       return true;   // 命中监视点，停止 si N 或 c
     }

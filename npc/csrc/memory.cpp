@@ -2,6 +2,7 @@
 #include <stdio.h>
 #define PMEM_SIZE (128*1024*1024)
 uint8_t pmem[PMEM_SIZE];
+long img_size;
 
 bool load_image(const char *image_path) {
   FILE *fp = fopen(image_path, "rb");//打开文件
@@ -11,10 +12,10 @@ bool load_image(const char *image_path) {
   }
 
   fseek(fp,0,SEEK_END);
-  long size = ftell(fp);
+  img_size = ftell(fp);
   fseek(fp,0,SEEK_SET);
 
-  if (fread(pmem, size, 1, fp));
+  if (fread(pmem, img_size, 1, fp));
   fclose(fp);
   return true;
 }
